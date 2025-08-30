@@ -1,47 +1,45 @@
 import formidable from "formidable";
-import fs from "fs";
+import fs from "fs/promises"; // ✅ use async version
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 🔑 Get your Gemini API key from env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const config = {
   api: {
-    bodyParser: false, // 🚨 must be false for file uploads
+    bodyParser: false,
+    externalResolver: true, // ✅ tells Vercel not to kill long process
   },
 };
 
 export default async function handler(req, res) {
-  if (req.method === "POST") {
-    try {
-      const form = formidable({ multiples: false });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-      form.parse(req, async (err, fields, files) => {
-        if (err) {
-          console.error("❌ File parse error:", err);
-          return res.status(400).json({ error: "File parsing failed" });
-        }
+  try {
+    const form = formidable({ multiples: false });
 
-        const file = files.file;
-        if (!file) {
-          return res.status(400).json({ error: "No file uploaded" });
-        }
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("❌ File parse error:", err);
+        return res.status(400).json({ error: "File parsing failed" });
+      }
 
-        const filePath = file.filepath;
-        const fileBuffer = fs.readFileSync(filePath);
+      const file = files.file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-        // ✅ Convert image to base64
+      try {
+        const fileBuffer = await fs.readFile(file.filepath);
         const base64Image = fileBuffer.toString("base64");
 
-        // 🧠 Call Gemini Pro Vision model
         const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
 
         const prompt = "Generate a short Instagram-style caption for this image.";
 
         const result = await model.generateContent([
           {
-            inlineData: {
-              mimeType: file.mimetype,
+            inline_data: {
+              mime_type: file.mimetype,
               data: base64Image,
             },
           },
@@ -50,13 +48,18 @@ export default async function handler(req, res) {
 
         const caption = result.response.text();
 
+        if (!caption) {
+          return res.status(500).json({ error: "Empty caption returned" });
+        }
+
         res.status(200).json({ caption });
-      });
-    } catch (error) {
-      console.error("⚠️ Gemini API error:", error);
-      res.status(500).json({ error: "Failed to generate caption" });
-    }
-  } else {
-    res.status(405).json({ error: "Method not allowed" });
+      } catch (apiErr) {
+        console.error("⚠️ Gemini API error:", apiErr);
+        res.status(500).json({ error: "Failed to generate caption" });
+      }
+    });
+  } catch (e) {
+    console.error("Unhandled error:", e);
+    res.status(500).json({ error: "Server error" });
   }
 }
