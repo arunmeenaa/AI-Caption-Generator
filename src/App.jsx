@@ -9,6 +9,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // ✅ API endpoint (local vs deployed)
+  const apiUrl =
+    import.meta.env.MODE === "development"
+      ? "http://localhost:3000/api/caption"
+      : "/api/caption";
+
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setFile(selectedFile);
@@ -21,14 +27,16 @@ function App() {
     if (!file) return alert("Please select an image first!");
     setLoading(true);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("http://localhost:5000/caption", {
+      const formData = new FormData();
+      formData.append("file", file); // ✅ send as FormData
+
+      const res = await fetch(apiUrl, {
         method: "POST",
         body: formData,
       });
+
+      if (!res.ok) throw new Error("Failed to generate caption");
 
       const data = await res.json();
       setCaption(data.caption);
@@ -48,7 +56,6 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-gradient-to-br from-purple-200 to-indigo-200">
-      
       <div className="flex flex-col items-center justify-center flex-grow p-4 sm:p-6">
         <motion.h1
           className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-6 sm:mb-8 text-purple-800 text-center"
@@ -59,7 +66,6 @@ function App() {
           AI Caption Generator
         </motion.h1>
 
-       
         <label className="w-full max-w-sm sm:max-w-md flex flex-col items-center justify-center border-2 border-dashed border-purple-400 rounded-xl p-4 sm:p-6 bg-white shadow-md cursor-pointer hover:bg-purple-50 transition text-center">
           <span className="text-gray-600 text-sm sm:text-base mb-2">
             Click or Drag & Drop Image
@@ -79,7 +85,6 @@ function App() {
           )}
         </label>
 
-       
         <button
           onClick={handleUpload}
           disabled={loading}
@@ -95,7 +100,6 @@ function App() {
           )}
         </button>
 
-        
         {caption && (
           <motion.div
             className="mt-6 sm:mt-8 p-4 sm:p-6 bg-white shadow-xl rounded-xl w-full max-w-sm sm:max-w-md text-center"
@@ -110,7 +114,6 @@ function App() {
               “{caption}”
             </p>
 
-            
             <button
               onClick={handleCopy}
               className="mt-3 sm:mt-4 px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition text-sm sm:text-base"
@@ -120,7 +123,7 @@ function App() {
           </motion.div>
         )}
       </div>
-      <Footer/>
+      <Footer />
     </div>
   );
 }
